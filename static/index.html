@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>TaskBot · FastAPI + Postgres + AI Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: #111827;
+    }
+    .app {
+      width: 100%;
+      max-width: 1180px;
+      background: #ffffff;
+      border-radius: 18px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+      padding: 18px 20px 16px;
+    }
+    .hidden { display: none; }
+
+    .topbar {
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .logo-wrap {
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .logo {
+      font-weight: 700;
+      font-size: 18px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .logo-pill {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6366f1, #22c55e);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:white;
+      font-size:14px;
+    }
+    .tagline {
+      font-size: 12px;
+      color:#6b7280;
+    }
+    .user-info {
+      font-size: 12px;
+      color:#6b7280;
+      text-align:right;
+    }
+    .logout-btn {
+      border:none;
+      background:transparent;
+      color:#ef4444;
+      font-size:11px;
+      cursor:pointer;
+      margin-top:3px;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color:#6b7280;
+      margin-bottom: 10px;
+    }
+
+    .card {
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background:#f9fafb;
+      padding: 14px 14px 10px;
+    }
+    label {
+      font-size: 13px;
+      color: #111827;
+      display: block;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      outline: none;
+      margin-bottom: 10px;
+      background: #ffffff;
+    }
+    input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 1px rgba(99,102,241,0.3);
+    }
+    .btn {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn-primary {
+      background: #6366f1;
+      color: white;
+    }
+    .btn-primary:disabled {
+      opacity:.6;
+      cursor:not-allowed;
+    }
+    .btn-ghost {
+      background: transparent;
+      color:#4b5563;
+      border:1px solid #e5e7eb;
+    }
+
+    .status {
+      font-size:12px;
+      margin-top: 4px;
+      min-height: 16px;
+      color:#b91c1c;
+    }
+    .status.ok { color:#16a34a; }
+
+    .layout-main {
+      display:grid;
+      grid-template-columns: 2.2fr 1.5fr;
+      gap: 14px;
+      margin-top: 8px;
+    }
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color:#111827;
+    }
+    .panel-subtitle {
+      font-size: 12px;
+      color:#6b7280;
+      margin-bottom: 6px;
+    }
+
+    /* Tasks table */
+    .tasks-header {
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .tasks-actions {
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    .pill {
+      font-size: 11px;
+      padding:2px 8px;
+      border-radius:999px;
+      border: 1px solid #e5e7eb;
+      color:#4b5563;
+      background:#f9fafb;
+    }
+    .tasks-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .tasks-table th,
+    .tasks-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align:left;
+      vertical-align: middle;
+    }
+    .tasks-table th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color:#9ca3af;
+      background:#f3f4f6;
+    }
+    .tasks-table tr:hover td {
+      background:#f9fafb;
+    }
+
+    .badge {
+      display:inline-block;
+      font-size:10px;
+      padding:2px 6px;
+      border-radius:999px;
+    }
+    .badge.overdue { background:#fee2e2; color:#b91c1c; }
+    .badge.high { background:#fef3c7; color:#92400e; }
+    .badge.medium { background:#e0f2fe; color:#0369a1; }
+    .badge.low { background:#dcfce7; color:#166534; }
+    .badge.none { background:#e5e7eb; color:#4b5563; }
+
+    .status-pill {
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid #e5e7eb;
+      background:#ffffff;
+      cursor:pointer;
+    }
+
+    .status-pill.todo { color:#4b5563; }
+    .status-pill.doing { color:#0ea5e9; border-color:#bae6fd; background:#f0f9ff; }
+    .status-pill.done { color:#16a34a; border-color:#bbf7d0; background:#f0fdf4; }
+
+    .small-input {
+      width:auto;
+      padding: 6px 8px;
+      font-size: 12px;
+      margin-bottom:0;
+    }
+
+    .table-actions button {
+      font-size:11px;
+      padding:3px 8px;
+      border-radius:999px;
+      border:none;
+      cursor:pointer;
+    }
+    .btn-clarify {
+      background:#eef2ff;
+      color:#4f46e5;
+    }
+    .btn-delete {
+      background:#fee2e2;
+      color:#b91c1c;
+      margin-left:4px;
+    }
+
+    /* Filters */
+    .filters-row {
+      display:flex;
+      gap:8px;
+      margin-bottom: 8px;
+      align-items:center;
+    }
+    .filters-row input,
+    .filters-row select {
+      font-size: 12px;
+      padding:5px 8px;
+      margin-bottom:0;
+      border-radius:999px;
+    }
+    .filters-row label {
+      margin-bottom:0;
+    }
+
+    /* Summary */
+    .summary-grid {
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .summary-item {
+      border-radius: 10px;
+      background:#ffffff;
+      border:1px solid #e5e7eb;
+      padding: 8px 10px;
+    }
+    .summary-label {
+      font-size: 11px;
+      color:#6b7280;
+      margin-bottom: 2px;
+    }
+    .summary-value {
+      font-size: 16px;
+      font-weight:600;
+    }
+    .summary-ai {
+      font-size: 12px;
+      color:#4b5563;
+      background:#eef2ff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-top: 6px;
+      white-space: pre-wrap;
+    }
+
+    /* Chat */
+    .chat-box {
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background:#f9fafb;
+      max-height: 260px;
+      overflow-y:auto;
+      padding: 10px;
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      margin-bottom: 6px;
+    }
+    .msg {
+      max-width: 80%;
+      padding: 7px 9px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    .msg.user {
+      align-self:flex-end;
+      background:#4f46e5;
+      color:white;
+      border-bottom-right-radius:4px;
+    }
+    .msg.bot {
+      align-self:flex-start;
+      background:#ffffff;
+      border:1px solid #e5e7eb;
+      border-bottom-left-radius:4px;
+      color:#111827;
+    }
+    .msg.meta {
+      align-self:center;
+      font-size:10px;
+      color:#9ca3af;
+      background:transparent;
+      border:none;
+      padding:0;
+    }
+    .input-row {
+      display:flex;
+      gap:6px;
+    }
+    #questionInput {
+      flex:1;
+      padding: 7px 9px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      font-size: 13px;
+      outline:none;
+      background:#ffffff;
+    }
+    #questionInput:focus {
+      border-color:#6366f1;
+      box-shadow:0 0 0 1px rgba(99,102,241,0.3);
+    }
+    #sendBtn {
+      padding:0 14px;
+      border-radius:999px;
+      border:none;
+      background:#4f46e5;
+      color:white;
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    #sendBtn:disabled {
+      opacity:.5;
+      cursor:not-allowed;
+    }
+    .hint {
+      font-size: 11px;
+      color:#6b7280;
+      margin-top:2px;
+    }
+
+    /* Settings / Admin */
+    .tabs {
+      display:flex;
+      gap:6px;
+      font-size:12px;
+      margin-top:6px;
+    }
+    .tab-btn {
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid #e5e7eb;
+      background:#ffffff;
+      cursor:pointer;
+    }
+    .tab-btn.active {
+      background:#4f46e5;
+      color:white;
+      border-color:#4f46e5;
+    }
+
+    @media (max-width: 900px) {
+      body { align-items:flex-start; }
+      .app {
+        border-radius: 0;
+        max-width:100%;
+        height:100vh;
+      }
+      .layout-main {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo-wrap">
+      <div class="logo">
+        <div class="logo-pill">T</div>
+        TaskBot
+      </div>
+      <div class="tagline">FastAPI · PostgreSQL · JWT · AI Agent</div>
+    </div>
+    <div class="user-info">
+      <div id="userEmailLabel">Chưa đăng nhập</div>
+      <button id="logoutBtn" class="logout-btn hidden">Đăng xuất</button>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="loginSection">
+    <div class="title">Đăng nhập để xem task & chat với TaskBot</div>
+    <div class="subtitle">
+      Dùng tài khoản đã tạo qua <code>/auth/register</code> (Swagger). Sau khi đăng nhập, bạn sẽ thấy Dashboard gồm Tasks · Summary · Chat.
+    </div>
+
+    <div class="card">
+      <label>Email</label>
+      <input id="email" type="email" placeholder="test@example.com" />
+
+      <label>Mật khẩu</label>
+      <input id="password" type="password" placeholder="••••••" />
+
+      <button id="loginBtn" class="btn btn-primary">Đăng nhập</button>
+      <div id="loginStatus" class="status"></div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="mainSection" class="hidden">
+    <div class="title">Dashboard</div>
+    <div class="subtitle">
+      Quản lý task, xem thống kê, và chat với AI agent (có thể tạo/sửa task bằng ngôn ngữ tự nhiên).
+    </div>
+
+    <div class="tabs">
+      <button id="tabDashboard" class="tab-btn active">Dashboard</button>
+      <button id="tabSettings" class="tab-btn">Settings</button>
+      <button id="tabAdmin" class="tab-btn hidden">Admin</button>
+    </div>
+
+    <!-- Dashboard content -->
+    <div id="dashboardView">
+      <div class="layout-main">
+        <!-- LEFT: TASKS -->
+        <div class="card">
+          <div class="tasks-header">
+            <div>
+              <div class="panel-title">Tasks</div>
+              <div class="panel-subtitle">Bảng task kiểu Notion. Bạn có thể thêm, sửa status, clarify bằng AI.</div>
+            </div>
+            <div class="tasks-actions">
+              <span class="pill" id="tasksCountPill">0 tasks</span>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="filters-row">
+            <label>Tìm:</label>
+            <input id="filterSearch" class="small-input" type="text" placeholder="Tìm theo tên..." />
+            <label>Risk:</label>
+            <select id="filterRisk" class="small-input">
+              <option value="all">All</option>
+              <option value="overdue">Overdue</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+              <option value="no_deadline">No deadline</option>
+            </select>
+            <label>Status:</label>
+            <select id="filterStatus" class="small-input">
+              <option value="all">All</option>
+              <option value="todo">Todo</option>
+              <option value="doing">Doing</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+
+          <!-- Add task -->
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input id="newTaskName" class="small-input" style="flex:1;" type="text" placeholder="Tên task mới..." />
+            <input id="newTaskDeadline" class="small-input" type="date" />
+            <select id="newTaskStatus" class="small-input">
+              <option value="todo">Todo</option>
+              <option value="doing">Doing</option>
+              <option value="done">Done</option>
+            </select>
+            <button id="addTaskBtn" class="btn btn-primary" style="font-size:12px; padding-inline:10px;">Thêm</button>
+          </div>
+
+          <table class="tasks-table">
+            <thead>
+            <tr>
+              <th style="width:40px;">ID</th>
+              <th>Tên task</th>
+              <th style="width:130px;">Deadline</th>
+              <th style="width:80px;">Risk</th>
+              <th style="width:80px;">Status</th>
+              <th style="width:110px;">Actions</th>
+            </tr>
+            </thead>
+            <tbody id="tasksTableBody">
+            <!-- rows -->
+            </tbody>
+          </table>
+          <div id="tasksStatus" class="status" style="margin-top:4px;"></div>
+        </div>
+
+        <!-- RIGHT: SUMMARY + CHAT -->
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <!-- Summary -->
+          <div class="card">
+            <div class="panel-title">Summary</div>
+            <div class="panel-subtitle">
+              Thống kê từ API <code>/tasks/summary</code>. Dùng phần này để giải thích với mentor về risk & reminder.
+            </div>
+
+            <div class="summary-grid">
+              <div class="summary-item">
+                <div class="summary-label">Tổng task</div>
+                <div id="sumTotal" class="summary-value">0</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">Overdue</div>
+                <div id="sumOverdue" class="summary-value">0</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">Sắp tới hạn</div>
+                <div id="sumUpcoming" class="summary-value">0</div>
+              </div>
+            </div>
+
+            <div class="summary-grid">
+              <div class="summary-item">
+                <div class="summary-label">Không deadline</div>
+                <div id="sumNoDeadline" class="summary-value">0</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">Risk cao</div>
+                <div id="sumHigh" class="summary-value">0</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">Risk TB/Thấp</div>
+                <div id="sumMedLow" class="summary-value">0</div>
+              </div>
+            </div>
+
+            <button id="planBtn" class="btn btn-primary" style="margin-top:4px; font-size:12px;">
+              Generate Today Plan (AI)
+            </button>
+
+            <div id="summaryAiHint" class="summary-ai">
+Gợi ý: Hỏi TaskBot: 
+- "Tóm tắt giúp tôi các task tuần này và gợi ý thứ tự ưu tiên."
+- "Task nào nguy cơ trễ cao?".
+            </div>
+          </div>
+
+          <!-- Chat -->
+          <div class="card">
+            <div class="panel-title">TaskBot Chat</div>
+            <div class="panel-subtitle">
+              Hỏi về task của bạn, hoặc dùng câu lệnh:
+              <code>tạo task Học FastAPI deadline 2025-11-20</code>,
+              <code>xoá task 3</code>,
+              <code>đánh dấu task 2 thành done</code>.
+            </div>
+
+            <div id="chatBox" class="chat-box"></div>
+
+            <div class="input-row">
+              <input id="questionInput" type="text" placeholder="Nhập câu hỏi hoặc câu lệnh..." />
+              <button id="sendBtn">Gửi</button>
+            </div>
+            <div class="hint">
+              Chat dùng API <code>/tasks/chat</code> (có lưu history vào DB).
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="settingsView" class="hidden" style="margin-top:10px;">
+      <div class="card">
+        <div class="panel-title">Settings</div>
+        <div class="panel-subtitle">Thông tin tài khoản & đổi mật khẩu.</div>
+
+        <div style="margin-bottom:8px;">
+          <div style="font-size:13px; margin-bottom:4px;">Thông tin user hiện tại:</div>
+          <div id="meInfo" style="font-size:12px; color:#4b5563;">—</div>
+        </div>
+
+        <div style="border-top:1px solid #e5e7eb; margin:8px 0 10px;"></div>
+
+        <div style="font-size:13px; margin-bottom:6px;">Đổi mật khẩu</div>
+        <label>Mật khẩu cũ</label>
+        <input id="oldPassword" type="password" placeholder="Mật khẩu hiện tại" />
+        <label>Mật khẩu mới</label>
+        <input id="newPassword" type="password" placeholder="Mật khẩu mới" />
+        <button id="changePassBtn" class="btn btn-primary" style="font-size:12px;">Đổi mật khẩu</button>
+        <div id="changePassStatus" class="status"></div>
+      </div>
+    </div>
+
+    <!-- Admin -->
+    <div id="adminView" class="hidden" style="margin-top:10px;">
+      <div class="card">
+        <div class="panel-title">Admin Overview</div>
+        <div class="panel-subtitle">
+          Tab này chỉ hiện nếu email của bạn trùng <code>ADMIN_EMAIL</code> trong .env.
+        </div>
+        <div id="adminInfo" style="font-size:13px; color:#4b5563;">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let accessToken = null;
+  let currentUserEmail = null;
+  let isAdmin = false;
+
+  // raw data for filters
+  let tasksRaw = [];
+  let summaryRaw = null;
+
+  const loginSection = document.getElementById('loginSection');
+  const mainSection  = document.getElementById('mainSection');
+
+  const emailInput   = document.getElementById('email');
+  const passwordInput= document.getElementById('password');
+  const loginBtn     = document.getElementById('loginBtn');
+  const loginStatus  = document.getElementById('loginStatus');
+
+  const userEmailLabel = document.getElementById('userEmailLabel');
+  const logoutBtn      = document.getElementById('logoutBtn');
+
+  const tasksTableBody = document.getElementById('tasksTableBody');
+  const tasksStatus    = document.getElementById('tasksStatus');
+  const tasksCountPill = document.getElementById('tasksCountPill');
+
+  const newTaskName     = document.getElementById('newTaskName');
+  const newTaskDeadline = document.getElementById('newTaskDeadline');
+  const newTaskStatus   = document.getElementById('newTaskStatus');
+  const addTaskBtn      = document.getElementById('addTaskBtn');
+
+  const filterSearch = document.getElementById('filterSearch');
+  const filterRisk   = document.getElementById('filterRisk');
+  const filterStatus = document.getElementById('filterStatus');
+
+  const sumTotal      = document.getElementById('sumTotal');
+  const sumOverdue    = document.getElementById('sumOverdue');
+  const sumUpcoming   = document.getElementById('sumUpcoming');
+  const sumNoDeadline = document.getElementById('sumNoDeadline');
+  const sumHigh       = document.getElementById('sumHigh');
+  const sumMedLow     = document.getElementById('sumMedLow');
+  const summaryAiHint = document.getElementById('summaryAiHint');
+
+  const planBtn       = document.getElementById('planBtn');
+
+  const chatBox       = document.getElementById('chatBox');
+  const questionInput = document.getElementById('questionInput');
+  const sendBtn       = document.getElementById('sendBtn');
+
+  const meInfo        = document.getElementById('meInfo');
+  const oldPassword   = document.getElementById('oldPassword');
+  const newPassword   = document.getElementById('newPassword');
+  const changePassBtn = document.getElementById('changePassBtn');
+  const changePassStatus = document.getElementById('changePassStatus');
+
+  const adminInfo     = document.getElementById('adminInfo');
+
+  const userEmailLabelEl = document.getElementById('userEmailLabel');
+
+  const tabDashboard = document.getElementById('tabDashboard');
+  const tabSettings  = document.getElementById('tabSettings');
+  const tabAdmin     = document.getElementById('tabAdmin');
+
+  const dashboardView= document.getElementById('dashboardView');
+  const settingsView = document.getElementById('settingsView');
+  const adminView    = document.getElementById('adminView');
+
+  function addMessage(text, type = 'bot') {
+    const div = document.createElement('div');
+    div.className = 'msg ' + type;
+    div.textContent = text;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  function badgeForRisk(risk) {
+    let cls = 'none';
+    let label = 'None';
+    if (risk === 'overdue') { cls = 'overdue'; label = 'Overdue'; }
+    else if (risk === 'high') { cls = 'high'; label = 'High'; }
+    else if (risk === 'medium') { cls = 'medium'; label = 'Med'; }
+    else if (risk === 'low') { cls = 'low'; label = 'Low'; }
+    else if (risk === 'no_deadline') { cls = 'none'; label = 'N/A'; }
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function statusClass(status) {
+    if (status === 'doing') return 'doing';
+    if (status === 'done') return 'done';
+    return 'todo';
+  }
+
+  function renderTasksTable() {
+    tasksTableBody.innerHTML = '';
+    const search = filterSearch.value.trim().toLowerCase();
+    const riskFilter = filterRisk.value;
+    const statusFilter = filterStatus.value;
+
+    let list = tasksRaw.slice();
+
+    list = list.filter(t => {
+      if (search && !t.name.toLowerCase().includes(search)) return false;
+      if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+      if (!summaryRaw || !summaryRaw.details) return true;
+      const detail = summaryRaw.details.find(d => d.id === t.id);
+      if (!detail) return true;
+      if (riskFilter !== 'all' && detail.risk_level !== riskFilter) return false;
+      return true;
+    });
+
+    if (!list.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="6" style="font-size:12px; color:#6b7280;">Không có task nào khớp filter.</td>`;
+      tasksTableBody.appendChild(tr);
+      return;
+    }
+
+    for (const t of list) {
+      const tr = document.createElement('tr');
+      const deadline = t.end_date ? new Date(t.end_date).toLocaleString() : '—';
+      const detail = summaryRaw && summaryRaw.details ? summaryRaw.details.find(d => d.id === t.id) : null;
+      const risk = detail ? detail.risk_level : 'none';
+
+      tr.innerHTML = `
+        <td>${t.id}</td>
+        <td>${t.name}</td>
+        <td>${deadline}</td>
+        <td>${badgeForRisk(risk)}</td>
+        <td>
+          <button class="status-pill ${statusClass(t.status)}" data-id="${t.id}">
+            ${t.status}
+          </button>
+        </td>
+        <td class="table-actions">
+          <button class="btn-clarify" data-id="${t.id}">✨ Clarify</button>
+          <button class="btn-delete" data-id="${t.id}">Xóa</button>
+        </td>
+      `;
+      tasksTableBody.appendChild(tr);
+    }
+
+    // add listeners for status buttons
+    tasksTableBody.querySelectorAll('.status-pill').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        const current = btn.textContent.trim();
+        // cycle todo -> doing -> done -> todo
+        const next = current === 'todo' ? 'doing' : (current === 'doing' ? 'done' : 'todo');
+        await updateTaskStatus(id, next);
+      });
+    });
+
+    // clarify
+    tasksTableBody.querySelectorAll('.btn-clarify').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        await clarifyTask(id);
+      });
+    });
+
+    // delete
+    tasksTableBody.querySelectorAll('.btn-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        if (confirm(`Xoá task ID ${id}?`)) {
+          await deleteTask(id);
+        }
+      });
+    });
+  }
+
+  async function loadTasks() {
+    if (!accessToken) return;
+    tasksStatus.textContent = 'Đang tải tasks...';
+
+    try {
+      const res = await fetch('/tasks', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+
+      const data = await res.json();
+      tasksRaw = data;
+      tasksCountPill.textContent = data.length + ' tasks';
+      if (!data.length) tasksStatus.textContent = 'Bạn chưa có task nào. Hãy tạo vài task trước.';
+      else tasksStatus.textContent = '';
+
+      await loadSummary(false); // no re-render tasks here (prevent double render)
+      renderTasksTable();
+    } catch (err) {
+      if (err.message === '401') {
+        tasksStatus.textContent = 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.';
+        switchToLogin();
+      } else {
+        console.error(err);
+        tasksStatus.textContent = 'Lỗi khi tải tasks: ' + err.message;
+      }
+    }
+  }
+
+  async function loadSummary(render = true) {
+    if (!accessToken) return;
+    try {
+      const res = await fetch('/tasks/summary', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      const data = await res.json();
+      summaryRaw = data;
+
+      sumTotal.textContent      = data.total;
+      sumOverdue.textContent    = data.overdue;
+      sumUpcoming.textContent   = data.upcoming;
+      sumNoDeadline.textContent = data.no_deadline;
+      sumHigh.textContent       = data.high_risk;
+      sumMedLow.textContent     = data.medium_risk + data.low_risk;
+
+      if (!data.total) {
+        summaryAiHint.textContent = "Hiện chưa có task. Hãy thêm vài task rồi hỏi TaskBot để xem gợi ý ưu tiên.";
+      } else {
+        summaryAiHint.textContent =
+"Gợi ý: Hỏi TaskBot:\n- 'Tóm tắt giúp tôi các task tuần này và gợi ý thứ tự ưu tiên.'\n- 'Task nào nguy cơ trễ cao?'\nHoặc bấm nút Generate Today Plan.";
+      }
+
+      if (render) renderTasksTable();
+    } catch (err) {
+      if (err.message === '401') {
+        switchToLogin();
+      } else {
+        console.error(err);
+      }
+    }
+  }
+
+  async function addTask() {
+    const name = newTaskName.value.trim();
+    const deadline = newTaskDeadline.value;
+    const status = newTaskStatus.value;
+
+    if (!name) {
+      tasksStatus.textContent = 'Vui lòng nhập tên task.';
+      return;
+    }
+    tasksStatus.textContent = 'Đang tạo task...';
+
+    try {
+      const body = {
+        name,
+        end_date: deadline ? deadline + "T00:00:00" : null,
+        status
+      };
+      const res = await fetch('/tasks', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      newTaskName.value = '';
+      newTaskDeadline.value = '';
+      newTaskStatus.value = 'todo';
+      await loadTasks();
+      tasksStatus.textContent = 'Tạo task thành công.';
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        tasksStatus.textContent = 'Lỗi khi tạo task: ' + err.message;
+      }
+    }
+  }
+
+  async function updateTaskStatus(id, status) {
+    try {
+      const body = { status };
+      const res = await fetch(`/tasks/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      await loadTasks();
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        tasksStatus.textContent = 'Lỗi khi cập nhật status: ' + err.message;
+      }
+    }
+  }
+
+  async function clarifyTask(id) {
+    try {
+      tasksStatus.textContent = `Đang clarify task ${id} bằng AI...`;
+      const res = await fetch(`/tasks/${id}/clarify`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      await loadTasks();
+      tasksStatus.textContent = `Clarify thành công cho task ${id}.`;
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        tasksStatus.textContent = 'Lỗi clarify task: ' + err.message;
+      }
+    }
+  }
+
+  async function deleteTask(id) {
+    try {
+      const res = await fetch(`/tasks/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      await loadTasks();
+      tasksStatus.textContent = `Đã xoá task ${id}.`;
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        tasksStatus.textContent = 'Lỗi xoá task: ' + err.message;
+      }
+    }
+  }
+
+  // ------------- Chat -------------
+  async function loadChatHistory() {
+    if (!accessToken) return;
+    chatBox.innerHTML = '';
+    try {
+      const res = await fetch('/chat/history?limit=30', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      const data = await res.json();
+      if (!data.length) {
+        addMessage('Xin chào! Mình là TaskBot. Hãy thêm vài task rồi hỏi mình để được tóm tắt & gợi ý ưu tiên nhé.', 'bot');
+        return;
+      }
+      for (const msg of data) {
+        addMessage(msg.content, msg.role === 'user' ? 'user' : 'bot');
+      }
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        addMessage('Lỗi khi load lịch sử chat: ' + err.message, 'bot');
+      }
+    }
+  }
+
+  async function sendQuestion() {
+    const q = questionInput.value.trim();
+    if (!q) return;
+    if (!accessToken) {
+      addMessage('Bạn chưa đăng nhập. Vui lòng đăng nhập lại.', 'bot');
+      return;
+    }
+
+    addMessage(q, 'user');
+    questionInput.value = '';
+    sendBtn.disabled = true;
+
+    try {
+      const res = await fetch('/tasks/chat', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ question: q })
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      const data = await res.json();
+      addMessage(data.answer || '(Không có câu trả lời)', 'bot');
+
+      await loadTasks();   // agent có thể đã tạo/xoá/sửa task
+    } catch (err) {
+      if (err.message === '401') {
+        addMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'bot');
+        switchToLogin();
+      } else {
+        console.error(err);
+        addMessage('Có lỗi khi gọi API: ' + err.message, 'bot');
+      }
+    } finally {
+      sendBtn.disabled = false;
+      questionInput.focus();
+    }
+  }
+
+  sendBtn.addEventListener('click', sendQuestion);
+  questionInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendQuestion();
+  });
+
+  // ------------- Plan -------------
+  planBtn.addEventListener('click', async () => {
+    if (!accessToken) return;
+    summaryAiHint.textContent = 'Đang sinh kế hoạch hôm nay bằng AI...';
+    try {
+      const res = await fetch('/tasks/plan/today', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      const data = await res.json();
+      summaryAiHint.textContent = data.plan || 'Không có kế hoạch.';
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        summaryAiHint.textContent = 'Lỗi khi gọi /tasks/plan/today: ' + err.message;
+      }
+    }
+  });
+
+  // ------------- Settings & Admin -------------
+  async function loadMe() {
+    if (!accessToken) return;
+    try {
+      const res = await fetch('/me', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) throw new Error('Lỗi ' + res.status);
+      const data = await res.json();
+      isAdmin = !!data.is_admin;
+      currentUserEmail = data.email;
+      userEmailLabelEl.textContent = data.email;
+
+      meInfo.textContent = `Email: ${data.email} · Created at: ${new Date(data.created_at).toLocaleString()} · Admin: ${data.is_admin ? 'Yes' : 'No'}`;
+
+      if (isAdmin) {
+        tabAdmin.classList.remove('hidden');
+        await loadAdminOverview();
+      } else {
+        tabAdmin.classList.add('hidden');
+      }
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        meInfo.textContent = 'Lỗi khi lấy thông tin user: ' + err.message;
+      }
+    }
+  }
+
+  async function loadAdminOverview() {
+    if (!accessToken || !isAdmin) return;
+    try {
+      const res = await fetch('/admin/overview', {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      });
+      if (!res.ok) {
+        adminInfo.textContent = 'Không thể load overview (có thể bạn không phải admin).';
+        return;
+      }
+      const data = await res.json();
+      adminInfo.textContent = `Total users: ${data.total_users} · Total tasks: ${data.total_tasks} · Avg tasks/user: ${data.avg_tasks_per_user}`;
+    } catch (err) {
+      console.error(err);
+      adminInfo.textContent = 'Lỗi khi load admin overview: ' + err.message;
+    }
+  }
+
+  changePassBtn.addEventListener('click', async () => {
+    const oldP = oldPassword.value.trim();
+    const newP = newPassword.value.trim();
+    if (!oldP || !newP) {
+      changePassStatus.textContent = 'Vui lòng nhập đầy đủ.';
+      return;
+    }
+    changePassStatus.textContent = 'Đang đổi mật khẩu...';
+    try {
+      const body = { old_password: oldP, new_password: newP };
+      const res = await fetch('/auth/change_password', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      if (res.status === 401) throw new Error('401');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error('Lỗi ' + res.status + ': ' + text);
+      }
+      changePassStatus.textContent = 'Đổi mật khẩu thành công.';
+      changePassStatus.className = 'status ok';
+      oldPassword.value = '';
+      newPassword.value = '';
+    } catch (err) {
+      if (err.message === '401') switchToLogin();
+      else {
+        console.error(err);
+        changePassStatus.textContent = 'Lỗi đổi mật khẩu: ' + err.message;
+        changePassStatus.className = 'status';
+      }
+    }
+  });
+
+  // ------------- Tabs -------------
+  function setActiveTab(tab) {
+    tabDashboard.classList.remove('active');
+    tabSettings.classList.remove('active');
+    tabAdmin.classList.remove('active');
+    dashboardView.classList.add('hidden');
+    settingsView.classList.add('hidden');
+    adminView.classList.add('hidden');
+
+    if (tab === 'dashboard') {
+      tabDashboard.classList.add('active');
+      dashboardView.classList.remove('hidden');
+    } else if (tab === 'settings') {
+      tabSettings.classList.add('active');
+      settingsView.classList.remove('hidden');
+    } else if (tab === 'admin') {
+      tabAdmin.classList.add('active');
+      adminView.classList.remove('hidden');
+    }
+  }
+
+  tabDashboard.addEventListener('click', () => setActiveTab('dashboard'));
+  tabSettings.addEventListener('click', () => setActiveTab('settings'));
+  tabAdmin.addEventListener('click', () => setActiveTab('admin'));
+
+  // ------------- Auth -------------
+  function switchToDashboard() {
+    loginSection.classList.add('hidden');
+    mainSection.classList.remove('hidden');
+    logoutBtn.classList.remove('hidden');
+    userEmailLabel.textContent = currentUserEmail || 'Đã đăng nhập';
+  }
+
+  function switchToLogin() {
+    accessToken = null;
+    currentUserEmail = null;
+    isAdmin = false;
+    loginSection.classList.remove('hidden');
+    mainSection.classList.add('hidden');
+    logoutBtn.classList.add('hidden');
+    userEmailLabel.textContent = 'Chưa đăng nhập';
+  }
+
+  loginBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value.trim();
+    if (!email || !password) {
+      loginStatus.textContent = 'Vui lòng nhập đầy đủ email và mật khẩu.';
+      return;
+    }
+
+    loginBtn.disabled = true;
+    loginStatus.textContent = 'Đang đăng nhập...';
+    loginStatus.className = 'status';
+
+    try {
+      const body = new URLSearchParams();
+      body.append('username', email);
+      body.append('password', password);
+
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+      });
+      if (!res.ok) throw new Error('Đăng nhập thất bại: ' + res.status);
+      const data = await res.json();
+      accessToken = data.access_token;
+      currentUserEmail = email;
+
+      loginStatus.textContent = 'Đăng nhập thành công!';
+      loginStatus.className = 'status ok';
+
+      switchToDashboard();
+      await loadMe();
+      await loadTasks();
+      await loadChatHistory();
+      questionInput.focus();
+    } catch (err) {
+      console.error(err);
+      accessToken = null;
+      loginStatus.textContent = 'Sai email hoặc mật khẩu. Vui lòng thử lại.';
+      loginStatus.className = 'status';
+    } finally {
+      loginBtn.disabled = false;
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    switchToLogin();
+    chatBox.innerHTML = '';
+    addMessage('Bạn đã đăng xuất.', 'bot');
+  });
+
+  addTaskBtn.addEventListener('click', addTask);
+  newTaskName.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addTask();
+  });
+
+  filterSearch.addEventListener('input', renderTasksTable);
+  filterRisk.addEventListener('change', renderTasksTable);
+  filterStatus.addEventListener('change', renderTasksTable);
+
+  // khởi tạo chat default nếu chưa login
+  if (!accessToken) {
+    addMessage('Xin chào! Vui lòng đăng nhập để bắt đầu làm việc với TaskBot.', 'bot');
+  }
+</script>
+</body>
+</html>
