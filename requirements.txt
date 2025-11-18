@@ -14,3 +14,4 @@ email-validator
 python-multipart
 
 openai
+langchain langchain-openai langchain-community
