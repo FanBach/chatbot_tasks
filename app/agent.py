@@ -1,160 +1,190 @@
 # app/agent.py
 from datetime import datetime, timezone
 from typing import Optional
-import re
 
 from sqlalchemy.orm import Session
 
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_openai import ChatOpenAI
+
 from .models import User, Task, ChatMessage
+from .config import OPENAI_API_KEY
 
 
+# =====================================
+# 1. SCHEMA CHUẨN CHO ACTION
+# =====================================
+class TaskAction(BaseModel):
+    action: str = Field(
+        description=(
+            "Hành động: create_task | delete_task | rename_task | "
+            "update_deadline | change_status | none"
+        )
+    )
+    task_id: Optional[int] = None
+    task_name: Optional[str] = None
+    new_name: Optional[str] = None
+    deadline: Optional[str] = None
+    new_status: Optional[str] = None
+
+
+# =====================================
+# 2. LLM STRUCTURED OUTPUT
+# =====================================
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    api_key=OPENAI_API_KEY,
+    temperature=0,
+)
+
+def parse_action(user_input: str) -> TaskAction:
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+Bạn là AI phân tích lệnh task.
+
+Bạn phải trả về JSON theo schema:
+- action: create_task / delete_task / rename_task / update_deadline / change_status / none
+- task_id: số hoặc null
+- task_name: string hoặc null
+- new_name: string hoặc null
+- deadline: string hoặc null
+- new_status: string hoặc null
+
+KHÔNG dùng chữ thừa. CHỈ trả JSON.
+"""
+        ),
+        ("human", "{input}")
+    ])
+
+    chain = prompt | llm.with_structured_output(TaskAction)
+    return chain.invoke({"input": user_input})
+
+
+
+# =====================================
+# 3. THỰC THI ACTION LÊN DATABASE
+# =====================================
 def handle_chat_action(question: str, user: User, db: Session) -> Optional[str]:
-    """
-    Rule-based mini agent:
-    - 'tạo task ... deadline YYYY-MM-DD'
-    - 'xoá task X' / 'xóa task X' / 'delete task X'
-    - 'đổi tên task X thành Y' / 'rename task X to Y'
-    - 'đánh dấu task X thành done' / 'mark task X as done'
-    - 'dời deadline task X sang YYYY-MM-DD' / 'move deadline task X to ...'
-    """
-    q_raw = question.strip()
-    q = q_raw.lower()
+    action: TaskAction = parse_action(question)
 
-    # Tạo task
-    if q.startswith("tạo task") or q.startswith("create task"):
-        parts = q_raw.split(" ", 2)
-        if len(parts) < 3:
-            return (
-                "Format tạo task chưa rõ. Ví dụ: 'tạo task Học FastAPI deadline 2025-11-20'."
-            )
-        tail = q_raw.split(" ", 2)[2].strip()
+    # ---- NONE ----
+    if action.action == "none":
+        return None
 
-        if "deadline" in tail.lower():
-            idx = tail.lower().find("deadline")
-            name = tail[:idx].strip()
-            deadline_str = tail[idx + len("deadline") :].strip()
-        else:
-            name = tail
-            deadline_str = ""
-
-        if not name:
-            return (
-                "Tên task trống. Hãy dùng format: 'tạo task Học FastAPI deadline 2025-11-20'."
-            )
+    # ---- CREATE TASK ----
+    if action.action == "create_task":
+        if not action.task_name:
+            return "Bạn muốn tạo task gì?"
+        name = action.task_name.strip()
 
         end_date = None
-        if deadline_str:
+        if action.deadline:
             try:
-                if "t" in deadline_str.lower():
-                    end_date = datetime.fromisoformat(deadline_str)
+                if "T" in action.deadline:
+                    end_date = datetime.fromisoformat(action.deadline)
                 else:
-                    end_date = datetime.fromisoformat(deadline_str + "T00:00:00")
+                    end_date = datetime.fromisoformat(action.deadline + "T00:00:00")
                 if end_date.tzinfo is None:
                     end_date = end_date.replace(tzinfo=timezone.utc)
-            except Exception:
-                end_date = None
+            except:
+                pass
 
-        task = Task(name=name, end_date=end_date, status="todo", owner_id=user.id)
+        task = Task(
+            name=name,
+            end_date=end_date,
+            status="todo",
+            owner_id=user.id
+        )
         db.add(task)
         db.commit()
         db.refresh(task)
-        deadline_msg = (
-            task.end_date.isoformat() if task.end_date else "không có deadline cụ thể"
-        )
-        return f"Đã tạo task mới: [ID {task.id}] {task.name} (deadline: {deadline_msg})."
 
-    # Xoá task
-    m = re.search(r"(xoá|xóa|delete)\s+task\s+(\d+)", q)
-    if m:
-        task_id = int(m.group(2))
+        dl = task.end_date.isoformat() if task.end_date else "không có deadline"
+        return f"Đã tạo task mới: [ID {task.id}] {task.name} (deadline: {dl})."
+
+    # ---- DELETE ----
+    if action.action == "delete_task":
+        if not action.task_id:
+            return "Bạn muốn xóa task nào?"
         task = (
             db.query(Task)
-            .filter(Task.id == task_id, Task.owner_id == user.id)
+            .filter(Task.id == action.task_id, Task.owner_id == user.id)
             .first()
         )
         if not task:
-            return f"Không tìm thấy task ID {task_id} của bạn."
+            return f"Không tìm thấy task ID {action.task_id}."
         db.delete(task)
         db.commit()
-        return f"Đã xoá task [ID {task_id}]."
+        return f"Đã xóa task [ID {action.task_id}]."
 
-    # Đổi tên task
-    m = re.search(r"đổi tên task\s+(\d+)\s+thành\s+(.+)", q_raw, re.IGNORECASE)
-    if not m:
-        m = re.search(r"rename\s+task\s+(\d+)\s+to\s+(.+)", q_raw, re.IGNORECASE)
-    if m:
-        task_id = int(m.group(1))
-        new_name = m.group(2).strip()
+    # ---- RENAME ----
+    if action.action == "rename_task":
+        if not action.task_id or not action.new_name:
+            return "Thiếu task_id hoặc tên mới."
         task = (
             db.query(Task)
-            .filter(Task.id == task_id, Task.owner_id == user.id)
+            .filter(Task.id == action.task_id, Task.owner_id == user.id)
             .first()
         )
         if not task:
-            return f"Không tìm thấy task ID {task_id} của bạn."
-        if not new_name:
-            return "Tên mới trống, không thể cập nhật."
-        task.name = new_name
+            return f"Không tìm thấy task ID {action.task_id}."
+        task.name = action.new_name.strip()
         task.updated_at = datetime.now(timezone.utc)
         db.commit()
-        return f"Đã đổi tên task [ID {task_id}] thành: {new_name}"
+        return f"Đã đổi tên task [ID {task.id}] thành '{task.name}'."
 
-    # Đánh dấu status
-    m = re.search(
-        r"(đánh dấu|mark)\s+task\s+(\d+)\s+(thành|as)\s+(todo|doing|done)",
-        q,
-        re.IGNORECASE,
-    )
-    if m:
-        task_id = int(m.group(2))
-        new_status = m.group(4).lower()
+    # ---- UPDATE DEADLINE ----
+    if action.action == "update_deadline":
+        if not action.task_id or not action.deadline:
+            return "Cần task_id và deadline mới."
         task = (
             db.query(Task)
-            .filter(Task.id == task_id, Task.owner_id == user.id)
+            .filter(Task.id == action.task_id, Task.owner_id == user.id)
             .first()
         )
         if not task:
-            return f"Không tìm thấy task ID {task_id} của bạn."
-        task.status = new_status
-        task.updated_at = datetime.now(timezone.utc)
-        db.commit()
-        return f"Đã đánh dấu task [ID {task_id}] là '{new_status}'."
-
-    # Dời deadline
-    m = re.search(
-        r"(dời|đổi|move)\s+deadline\s+task\s+(\d+)\s+(sang|to)\s+(.+)",
-        q_raw,
-        re.IGNORECASE,
-    )
-    if m:
-        task_id = int(m.group(2))
-        deadline_str = m.group(4).strip()
-        task = (
-            db.query(Task)
-            .filter(Task.id == task_id, Task.owner_id == user.id)
-            .first()
-        )
-        if not task:
-            return f"Không tìm thấy task ID {task_id} của bạn."
+            return f"Không tìm thấy task ID {action.task_id}."
 
         try:
-            if "t" in deadline_str.lower():
-                new_deadline = datetime.fromisoformat(deadline_str)
+            if "T" in action.deadline:
+                new_dl = datetime.fromisoformat(action.deadline)
             else:
-                new_deadline = datetime.fromisoformat(deadline_str + "T00:00:00")
-            if new_deadline.tzinfo is None:
-                new_deadline = new_deadline.replace(tzinfo=timezone.utc)
-        except Exception:
-            return "Không parse được deadline mới. Hãy dùng format YYYY-MM-DD hoặc YYYY-MM-DDTHH:MM."
+                new_dl = datetime.fromisoformat(action.deadline + "T00:00:00")
+            if new_dl.tzinfo is None:
+                new_dl = new_dl.replace(tzinfo=timezone.utc)
+            task.end_date = new_dl
+        except:
+            return "Deadline không đúng định dạng."
 
-        task.end_date = new_deadline
         task.updated_at = datetime.now(timezone.utc)
         db.commit()
-        return f"Đã cập nhật deadline task [ID {task_id}] thành: {new_deadline.isoformat()}"
+        return f"Đã cập nhật deadline task [ID {task.id}] thành {task.end_date.isoformat()}."
+
+    # ---- CHANGE STATUS ----
+    if action.action == "change_status":
+        if not action.task_id or not action.new_status:
+            return "Cần task_id và trạng thái mới."
+        task = (
+            db.query(Task)
+            .filter(Task.id == action.task_id, Task.owner_id == user.id)
+            .first()
+        )
+        if not task:
+            return f"Không tìm thấy task ID {action.task_id}."
+        task.status = action.new_status.strip()
+        task.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return f"Đã đổi trạng thái task [ID {task.id}] thành '{task.status}'."
 
     return None
 
 
+# =====================================
+# 4. SAVE CHAT HISTORY
+# =====================================
 def save_chat_message(db: Session, user: User, role: str, content: str) -> None:
     msg = ChatMessage(user_id=user.id, role=role, content=content)
     db.add(msg)
